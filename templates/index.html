@@ -2,8 +2,8 @@
 
 {% block title %}Hello, SmartNinja{% endblock title %}
 {% block content %}
-    {% if is_logged_in %}
-        <h1>Hi, {{name}}! Welcome back to HTML ;)</h1>
+    {% if user %}
+        <h1>Hi, {{user.first_name}}! Welcome back to HTML ;)</h1>
     {% else %}
         <h1>Hi, stranger! Please login</h1>
     {% endif %}
@@ -11,10 +11,6 @@
     {% for article in articles %}
         <h2>{{article}}</h2>
     {% endfor %}
-
-    <div class="alert alert-primary" role="alert">
-      A simple primary alert—check it out!
-    </div>
 
     <img src="/static/img/smartninja-logo.png" alt="Logo">
 {% endblock content %}
