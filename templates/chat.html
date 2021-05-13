@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}SmartNinja Chat{% endblock title %}
+{% block content %}
+    <h1>This is the chat page</h1>
+
+    <form method="post">
+        <input name="first_name" type="text" placeholder="Your name...">
+        <textarea name="message_text" placeholder="Your message..." cols="20" rows="4"></textarea>
+        <button>Submit</button>
+    </form>
+
+    <h2>Messages:</h2>
+    {% if not messages %}
+        <p>There are no messages</p>
+    {% endif %}
+    {% if messages %}
+        {% for message in messages %}
+            <p><strong>{{message.author}}: </strong>{{message.text}}</p>
+        {% endfor %}
+    {% endif %}
+{% endblock content %}
