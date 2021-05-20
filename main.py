@@ -1,5 +1,8 @@
-from flask import Flask, render_template, request, make_response, redirect, url_for
+from flask import Flask, render_template, request, make_response, redirect, url_for, g
 from sqla_wrapper import SQLAlchemy
+import uuid
+import hashlib
+from functools import wraps
 
 app = Flask(__name__)
 db = SQLAlchemy("sqlite:///db.sqlite")
@@ -7,7 +10,7 @@ db = SQLAlchemy("sqlite:///db.sqlite")
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    author = db.Column(db.String, unique=False)
+    author = db.Column(db.String, unique=False, nullable=False)
     text = db.Column(db.String, unique=False)
 
 
@@ -16,26 +19,77 @@ class User(db.Model):
     first_name = db.Column(db.String, unique=False)
     email = db.Column(db.String, unique=True, nullable=False)
     password = db.Column(db.String, unique=False)
+    session_token = db.Column(db.String, unique=True)
+    admin = db.Column(db.Boolean, nullable=True)
 
 
 db.create_all()
 
 
+def get_user():
+    if 'user' not in g:
+        session_token = request.cookies.get("session_token")
+        user = None
+        if session_token:
+            user = db.query(User).filter_by(session_token=session_token).first()
+        g.user = user
+
+    return g.user
+
+
+@app.context_processor
+def inject_user():
+    user = get_user()
+
+    return dict(user=user)
+
+
+def auth_guard(handler):
+    @wraps(handler)
+    def decorated_function(*args, **kwargs):
+        session_token = request.cookies.get("session_token")
+        if not session_token:
+            return redirect(url_for('login'))
+        return handler(*args, **kwargs)
+    return decorated_function
+
+
+def with_email_and_pass(handler):
+    @wraps(handler)
+    def decorated_function(*args, **kwargs):
+        if request.method == "GET":
+            return handler(*args, **kwargs)
+
+        email = request.form.get("email")
+        password = request.form.get("password")
+
+        if not email or not password:
+            return render_template("missing_login_data.html", email=email, password=password)
+
+        return handler(*args, **kwargs)
+    return decorated_function
+
+
 @app.route("/", methods=["GET"])
 def index():
-    email = request.cookies.get("email")
-    user = db.query(User).filter_by(email=email).first()
-
     articles = ["My first article", "It's fun to learn"]
 
-    return render_template(
-        "index.html",
-        user=user,
-        articles=articles
-    )
+    return render_template("index.html", articles=articles)
+
+
+@app.route("/profile")
+@auth_guard
+def profile():
+    user = get_user()
+
+    if user.admin:
+        return render_template("profile_admin.html")
+
+    return render_template("profile.html")
 
 
 @app.route("/chat", methods=["GET", "POST"])
+@auth_guard
 def chat():
     if request.method == "GET":
         messages = db.query(Message).all()
@@ -43,10 +97,10 @@ def chat():
         return render_template("chat.html", messages=messages)
 
     if request.method == "POST":
-        first_name = request.form.get("first_name")
+        user = get_user()
         message_text = request.form.get("message_text")
 
-        message = Message(author=first_name, text=message_text)
+        message = Message(author=user.first_name, text=message_text)
         message.save()
 
         messages = db.query(Message).all()
@@ -55,6 +109,7 @@ def chat():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@with_email_and_pass
 def login():
     if request.method == "GET":
         return render_template("login.html")
@@ -67,13 +122,32 @@ def login():
         if not user:
             return render_template("login.html", did_login_fail=True)
 
-        are_passwords_same = user.password == password
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        are_passwords_same = user.password == hashed_password
         if not are_passwords_same:
             return render_template("login.html", did_login_fail=True)
 
+        session_token = str(uuid.uuid4())
+        user.session_token = session_token
+        user.save()
+
         response = make_response(redirect(url_for('index')))
-        response.set_cookie("email", email)
+        response.set_cookie("session_token", session_token)
         return response
+
+
+@app.route("/logout", methods=["GET"])
+def logout():
+    user = get_user()
+    BLANK_SESSION_TOKEN = ""
+
+    if user:
+        user.session_token = BLANK_SESSION_TOKEN
+        user.save()
+
+    response = make_response(redirect(url_for('index')))
+    response.set_cookie("session_token", BLANK_SESSION_TOKEN)
+    return response
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -86,28 +160,26 @@ def register():
         email = request.form.get("email")
         password = request.form.get("password")
 
-        # TODO: Check valid email and password
+        if not email or not password:
+            return render_template("register.html")
 
-        user = User(first_name=first_name, email=email, password=password)
+        session_token = str(uuid.uuid4())
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+
+        user = User(
+            first_name=first_name,
+            email=email,
+            password=hashed_password,
+            session_token=session_token
+        )
 
         db.add(user)
         db.commit()
 
-        response = make_response(render_template(
-            "register_success.html",
-            first_name=first_name,
-            email=email,
-            is_logged_in=True
-        ))
-        response.set_cookie("email", email)
+        response = make_response(render_template("register_success.html", user=user))
+        response.set_cookie("session_token", session_token)
 
         return response
-
-
-@app.route("/profile")
-def profile():
-    is_logged_in = True
-    return render_template("profile.html", is_logged_in=is_logged_in)
 
 
 if __name__ == '__main__':
