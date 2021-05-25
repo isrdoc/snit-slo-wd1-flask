@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}SmartNinja Profile - Edit{% endblock title %}
+{% block content %}
+    <h1>Here is where your edit your profile, {{user.first_name}}</h1>
+
+    <form method="post">
+        <input name="first_name" type="text" placeholder="Your new name..." value="{{user.first_name}}">
+        <input name="email" type="email" placeholder="Your new email..." value="{{user.email}}">
+        <input name="password" type="password" placeholder="Your new password...">
+        <input name="password_confirm" type="password" placeholder="Repeat new password...">
+        <button>Submit</button>
+    </form>
+
+    <br />
+    <a href="/profile">Back to profile</a>
+{% endblock content %}

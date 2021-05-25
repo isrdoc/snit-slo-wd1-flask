@@ -20,7 +20,9 @@ class User(db.Model):
     email = db.Column(db.String, unique=True, nullable=False)
     password = db.Column(db.String, unique=False)
     session_token = db.Column(db.String, unique=True)
-    admin = db.Column(db.Boolean, nullable=True)
+    is_admin = db.Column(db.Boolean, nullable=True)
+    is_deleted = db.Column(db.Boolean, nullable=True)
+    undelete_token = db.Column(db.String, unique=True)
 
 
 db.create_all()
@@ -47,9 +49,10 @@ def inject_user():
 def auth_guard(handler):
     @wraps(handler)
     def decorated_function(*args, **kwargs):
-        session_token = request.cookies.get("session_token")
-        if not session_token:
+        user = get_user()
+        if not user:
             return redirect(url_for('login'))
+
         return handler(*args, **kwargs)
     return decorated_function
 
@@ -82,10 +85,85 @@ def index():
 def profile():
     user = get_user()
 
-    if user.admin:
-        return render_template("profile_admin.html")
+    # print(user.admin)
+
+    # if user.admin:
+    #     return render_template("profile_admin.html")
 
     return render_template("profile.html")
+
+
+@app.route("/profile/edit", methods=["GET", "POST"])
+@auth_guard
+def profile_edit():
+    if request.method == "GET":
+        return render_template("profile_edit.html")
+
+    if request.method == "POST":
+        first_name = request.form.get("first_name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+        password_confirm = request.form.get("password_confirm")
+
+        user = get_user()
+
+        if first_name:
+            user.first_name = first_name
+        if email:
+            user.email = email
+        if password and password_confirm and password == password_confirm:
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            user.password = hashed_password
+
+        user.save()
+
+        # TODO: add current values to edit form
+        # TODO: return feedback to user if password was not changed due to missing password_confirm
+
+        return redirect(url_for("profile"))
+
+
+@app.route("/profile/delete", methods=["GET", "POST"])
+@auth_guard
+def profile_delete():
+    if request.method == "GET":
+        return render_template("profile_delete.html")
+
+    if request.method == "POST":
+        user = get_user()
+
+        user.is_deleted = True
+        user.save()
+
+        response = make_response(redirect(url_for('index')))
+        response.set_cookie("session_token", "")
+        return response
+
+
+@app.route("/profile/undelete", methods=["GET", "POST"])
+def profile_undelete():
+    undelete_token = request.cookies.get("undelete_token")
+    if not undelete_token:
+        return redirect(url_for('login'))
+
+    if request.method == "GET":
+        return render_template("profile_undelete.html")
+
+    if request.method == "POST":
+        user = db.query(User).filter_by(undelete_token=undelete_token).first()
+        print(user)
+        if not user:
+            return redirect(url_for('login'))
+
+        user.is_deleted = False
+
+        session_token = str(uuid.uuid4())
+        user.session_token = session_token
+        user.save()
+
+        response = make_response(redirect(url_for('profile')))
+        response.set_cookie("session_token", session_token)
+        return response
 
 
 @app.route("/chat", methods=["GET", "POST"])
@@ -126,6 +204,15 @@ def login():
         are_passwords_same = user.password == hashed_password
         if not are_passwords_same:
             return render_template("login.html", did_login_fail=True)
+
+        if user.is_deleted:
+            undelete_token = str(uuid.uuid4())
+            user.undelete_token = undelete_token
+            user.save()
+
+            response = make_response(redirect(url_for('profile_undelete')))
+            response.set_cookie("undelete_token", undelete_token)
+            return response
 
         session_token = str(uuid.uuid4())
         user.session_token = session_token
@@ -173,6 +260,7 @@ def register():
             session_token=session_token
         )
 
+        # TODO: Gracefully handle errors from db (such as duplicate user)
         db.add(user)
         db.commit()
 

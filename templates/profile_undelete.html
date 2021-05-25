@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}SmartNinja Profile - Edit{% endblock title %}
+{% block content %}
+    <h1>Here is where your undelete your profile, {{user.first_name}}</h1>
+
+    <h3>Are you sure you want to undelete your user profile?</h3>
+
+    <form method="post">
+        <button>Undelete user</button>
+    </form>
+{% endblock content %}

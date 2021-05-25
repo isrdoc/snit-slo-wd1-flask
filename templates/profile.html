@@ -4,4 +4,9 @@
 {% block content %}
     <h1>Here is your profile, {{user.first_name}}</h1>
     <p>Your email is {{user.email}}.</p>
+
+    <ul>
+        <li><a href="/profile/edit">Edit profile</a></li>
+        <li><a href="/profile/delete">Delete profile</a></li>
+    </ul>
 {% endblock content %}
