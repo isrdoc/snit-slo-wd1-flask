@@ -1,4 +1,6 @@
-from flask import Flask, render_template, request, make_response, redirect, url_for, g
+import requests
+import json
+from flask import Flask, render_template, request, make_response, redirect, url_for, g, jsonify
 from sqla_wrapper import SQLAlchemy
 import uuid
 import hashlib
@@ -78,6 +80,22 @@ def index():
     articles = ["My first article", "It's fun to learn"]
 
     return render_template("index.html", articles=articles)
+
+
+@app.route("/api-demo", methods=["GET"])
+def api_demo():
+    url = "https://imdb8.p.rapidapi.com/title/get-awards"
+    querystring = {"tconst": "tt0944947"}
+    headers = {
+        'x-rapidapi-key': "16aa2f957dmshc20c857a742dcebp17df72jsnf5a77d0223b2",
+        'x-rapidapi-host': "imdb8.p.rapidapi.com"
+    }
+
+    api_response = requests.request("GET", url, headers=headers, params=querystring)
+    content = json.loads(api_response.text)
+    result = content["resource"]["awards"][0]["nominations"]["titles"][0]
+
+    return jsonify(result)
 
 
 @app.route("/profile")
@@ -164,6 +182,29 @@ def profile_undelete():
         response = make_response(redirect(url_for('profile')))
         response.set_cookie("session_token", session_token)
         return response
+
+
+@app.route("/messages", methods=["GET"])
+@auth_guard
+def messages():
+    if request.method == "GET":
+        message_list = db.query(Message).all()
+        message_serialized = []
+        for message in message_list:
+            message_serialized.append({
+                "id": message.id,
+                "author": message.author,
+                "text": message.text
+            })
+
+        return jsonify(message_serialized)
+
+
+@app.route("/chat-list", methods=["GET"])
+@auth_guard
+def chat_list():
+    if request.method == "GET":
+        return render_template("chat-list.html")
 
 
 @app.route("/chat", methods=["GET", "POST"])

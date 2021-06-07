@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}SmartNinja Chat{% endblock title %}
+{% block content %}
+    <h1>This is the chat page</h1>
+
+    <h2>Messages:</h2>
+    <div id="messages"></div>
+
+    <script>
+        fetch('/messages')
+            .then((response) => response.json())
+            .then((messages) => {
+                var messagesDiv = document.getElementById('messages')
+
+                messages.forEach((message) => {
+                    var chatMessage = document.createElement('p')
+                    chatMessage.innerHTML = message.text
+                    messagesDiv.append(chatMessage)
+                })
+            })
+    </script>
+{% endblock content %}
